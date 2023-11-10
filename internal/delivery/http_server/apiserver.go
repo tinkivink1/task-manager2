@@ -2,10 +2,11 @@ package apiserver
 
 import (
 	"TaskManager/internal/models"
-	"TaskManager/internal/storage/postgres"
+	"errors"
+
+	// "TaskManager/internal/storage/postgres"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -13,53 +14,70 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// MessageResponse represents a response message.
-// swagger:response messageResponse
-type MessageResponse struct {
-    // The message string.
-    // Example: Task deleted successfully.
-    Message string `json:"message"`
+type Storage interface {
+	CreateUser(username, password string) (int, error)
+	GetUserByUsername(username string) (*models.User, error)
+	GetUserByUsernameAndPassword(username, password string) (*models.User, error)
+
+	GetTasks(userID int) ([]models.Task, error)
+	CreateTask(userID int, title, description string, scheduledFor time.Time) error
+	GetTaskByID(userID, taskID int) (*models.Task, error)
+	UpdateTask(userID int, task *models.Task) error
+	DeleteTask(userID, taskID int) error
 }
 
-// ErrorResponse represents an error response.
-// swagger:response errorResponse
-type ErrorResponse struct {
-    // The error message.
-    // Example: Invalid task ID.
-    Error string `json:"error"`
+type Cache interface {
+	Get(key string) (string, error)
+	Set(key string, value string, expiration time.Duration) error
+	Del(key, value string, expiration time.Duration) error
 }
 
-// APIServer represents the API server.
-type APIServer struct{
-	config *Config
-	logger *logrus.Logger
-	router *gin.Engine
-	storage *postgres.Storage
-
+type APIServer struct {
+	config  *Config
+	logger  *logrus.Logger
+	router  *gin.Engine
+	storage Storage
+	cache   Cache
 }
 
-func New(config *Config) *APIServer{
+func New(config *Config) (*APIServer, error) {
+	if config == nil {
+		return nil, errors.New("Config is nil")
+	}
+
 	return &APIServer{
 		config: config,
 		logger: logrus.New(),
 		router: gin.Default(),
-	}
+	}, nil
 }
 
 func (s *APIServer) Start() error {
-	if err := s.configureLogger(); err != nil{ 
+	if err := s.configureLogger(); err != nil {
 		return err
 	}
-	
-	s.configureRouter()
 
-	if err := s.configureStore(); err != nil{ 
-		return err
-	}
+	s.configureRouter()
 
 	s.logger.Info("Starting API server")
 
+	if s.config != nil {
+		s.logger.Info(s.config)
+	}
+
 	return s.router.Run(s.config.BindAddr)
+}
+
+func (s *APIServer) UseDB(storage Storage) error {
+	s.storage = storage
+
+	return nil
+}
+
+func (s *APIServer) UseCache(cache Cache) error {
+	s.cache = cache
+
+	return nil
 }
 
 func (s *APIServer) configureLogger() error {
@@ -70,10 +88,10 @@ func (s *APIServer) configureLogger() error {
 	}
 
 	s.logger.SetLevel(level)
-	s.logger.SetFormatter( &logrus.TextFormatter{
-		ForceColors: true,
-		TimestampFormat : "02.01.2006 15:04:05",
-		FullTimestamp:true,
+	s.logger.SetFormatter(&logrus.TextFormatter{
+		ForceColors:     true,
+		TimestampFormat: "02.01.2006 15:04:05",
+		FullTimestamp:   true,
 	})
 
 	return nil
@@ -84,84 +102,26 @@ func (s *APIServer) configureRouter() {
 
 	s.router.LoadHTMLGlob("static/*")
 
-	s.router.GET("/", s.handleIndex)
-	s.router.GET("/index", s.handleIndex)
-		
-	s.router.POST("/login", s.handleLogin)
-	s.router.POST("/register", s.handleRegister)
-
-	s.router.Use(s.AuthMiddleware()).GET("/tasks", s.handleGetTasks)
-	s.router.Use(s.AuthMiddleware()).POST("/tasks", s.handleCreateTask)
-	s.router.Use(s.AuthMiddleware()).GET("/tasks/:id", s.handleGetTask)
-	s.router.Use(s.AuthMiddleware()).PUT("/tasks/:id", s.handleUpdateTask)
-	s.router.Use(s.AuthMiddleware()).DELETE("/tasks/:id", s.handleDeleteTask)
-
-}
-
-func (s *APIServer) configureStore() error {
-	store := postgres.New(s.config.Storage)
-	if err := store.Open(); err != nil { 
-		return err
+	publicGroup := s.router.Group("/")
+	{
+		publicGroup.GET("/", s.handleIndex)
+		publicGroup.GET("/index", s.handleIndex)
+		publicGroup.POST("/login", s.handleLogin)
+		publicGroup.POST("/register", s.handleRegister)
 	}
 
-	s.storage = store
-	return nil
-}
+	privateGroup := s.router.Group("/tasks")
+	privateGroup.Use(s.AuthMiddleware())
+	{
+		privateGroup.GET("", s.handleGetTasks)
+		privateGroup.POST("", s.handleCreateTask)
+		privateGroup.GET("/:id", s.handleGetTask)
+		privateGroup.PUT("/:id", s.handleUpdateTask)
+		privateGroup.DELETE("/:id", s.handleDeleteTask)
+	}
 
-// func (s *APIServer) LoggerMiddleware() gin.HandlerFunc {
-//     return func(ctx *gin.Context) {
-//         start := time.Now()
-
-//         // Вызываем следующий обработчик запроса
-//         ctx.Next()
-
-//         // Завершаем запись в логах после обработки запроса
-//         latency := time.Since(start)
-//         clientIP := ctx.ClientIP()
-//         method := ctx.Request.Method
-//         path := ctx.Request.URL.Path
-//         status := ctx.Writer.Status()
-
-//         s.logger.WithFields(logrus.Fields{
-//             "timestamp": time.Now().Format("02/01/2006 15:04:05"),
-//             "latency":   latency,
-//             "clientIP":  clientIP,
-//             "method":    method,
-//             "path":      path,
-//             "status":    status,
-//         }).Info("Request processed")
-//     }
-// }
-
-func (s *APIServer) AuthMiddleware() gin.HandlerFunc {
-	return func(ctx *gin.Context) {
-		authorizationHeader := ctx.GetHeader("Authorization")
-		if authorizationHeader == "" {
-			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header is missing"})
-			ctx.Abort()
-			return
-		}
-
-		tokenString := strings.Split(authorizationHeader, " ")[1]
-		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-			return []byte(s.config.JWTSecret), nil
-		})
-
-		if err != nil || !token.Valid {
-			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
-			ctx.Abort()
-			return
-		}
-
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok || !token.Valid {
-			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token claims"})
-			ctx.Abort()
-			return
-		}
-
-		ctx.Set("userID", claims["sub"])
-		ctx.Next()
+	if s.config.Caching {
+		privateGroup.Use(s.CacheMiddleware())
 	}
 }
 
@@ -170,16 +130,13 @@ func (s *APIServer) handleIndex(ctx *gin.Context) {
 	ctx.HTML(http.StatusOK, "index.html", nil)
 }
 
-// handleLogin authenticates a user and generates a JWT token.
-// swagger:route POST /login auth handleLogin
-//
-// Authenticate user and generate JWT token.
-//
-// Responses:
-//   200: tokenResponse
-//   400: errorResponse
-//   401: errorResponse
-//   500: errorResponse
+// @Summary Handling login
+// @Description Handling login using given login and password
+// @Accept json
+// @Produce json
+// @Success 200 {object} TokenResponse
+// @Failure 400,401,500 {object} ErrorResponse
+// @Router /login [post]
 func (s *APIServer) handleLogin(ctx *gin.Context) {
 	var loginData struct {
 		Username string `json:"username"`
@@ -187,13 +144,13 @@ func (s *APIServer) handleLogin(ctx *gin.Context) {
 	}
 
 	if err := ctx.ShouldBindJSON(&loginData); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid login data"})
+		ctx.JSON(http.StatusBadRequest, ErrorResponse{"Invalid login data"})
 		return
 	}
 
 	user, err := s.storage.GetUserByUsernameAndPassword(loginData.Username, loginData.Password)
 	if err != nil || user == nil {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
+		ctx.JSON(http.StatusUnauthorized, ErrorResponse{"Invalid username or password"})
 		return
 	}
 
@@ -204,23 +161,20 @@ func (s *APIServer) handleLogin(ctx *gin.Context) {
 
 	tokenString, err := token.SignedString([]byte(s.config.JWTSecret))
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		ctx.JSON(http.StatusInternalServerError, ErrorResponse{"Failed to generate token"})
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"token": tokenString})
+	ctx.JSON(http.StatusOK, TokenResponse{tokenString})
 }
 
-// handleRegister registers a new user and generates a JWT token.
-// swagger:route POST /register auth handleRegister
-//
-// Register a new user and generate JWT token.
-//
-// Responses:
-//   200: tokenResponse
-//   400: errorResponse
-//   409: errorResponse
-//   500: errorResponse
+// @Summary Handling user registration
+// @Description Handling user registration using given username and password
+// @Accept json
+// @Produce json
+// @Success 200 {object} TokenResponse "Successful response with an access token"
+// @Failure 400,409,500 {object} ErrorResponse "Error response with details"
+// @Router /register [post]
 func (s *APIServer) handleRegister(ctx *gin.Context) {
 	var registrationData struct {
 		Username string `json:"username"`
@@ -228,20 +182,20 @@ func (s *APIServer) handleRegister(ctx *gin.Context) {
 	}
 
 	if err := ctx.ShouldBindJSON(&registrationData); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid registration data"})
+		ctx.JSON(http.StatusBadRequest, ErrorResponse{"Invalid registration data"})
 		return
 	}
 
 	existingUser, err := s.storage.GetUserByUsername(registrationData.Username)
 	if err == nil || existingUser != nil {
-		ctx.JSON(http.StatusConflict, gin.H{"error": "Username already exists"})
+		ctx.JSON(http.StatusConflict, ErrorResponse{"Username already exists"})
 		s.logger.Info(err)
 		return
 	}
 
 	userID, err := s.storage.CreateUser(registrationData.Username, registrationData.Password)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
+		ctx.JSON(http.StatusInternalServerError, ErrorResponse{"Failed to create user"})
 		s.logger.Info(err)
 		return
 	}
@@ -253,52 +207,45 @@ func (s *APIServer) handleRegister(ctx *gin.Context) {
 
 	tokenString, err := token.SignedString([]byte(s.config.JWTSecret))
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		ctx.JSON(http.StatusInternalServerError, ErrorResponse{"Failed to generate token"})
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"token": tokenString})
+	ctx.JSON(http.StatusOK, TokenResponse{tokenString})
 }
 
-// handleGetTasks retrieves tasks for the authenticated user.
-// swagger:route GET /tasks tasks handleGetTasks
-//
-// Get tasks for the authenticated user.
-//
-// Responses:
-//   200: tasksResponse
-//   400: errorResponse
-//   401: errorResponse
-//   500: errorResponse
+// @Summary Handling fetching tasks
+// @Description Handling the request to fetch tasks for the authenticated user
+// @Produce json
+// @Param userID path int true "User ID"
+// @Success 200 {array} models.Task "List of tasks"
+// @Failure 400,401,500 {object} ErrorResponse "Error response with details"
+// @Router /tasks [get]
 func (s *APIServer) handleGetTasks(ctx *gin.Context) {
 	userID, _ := ctx.Get("userID")
 
 	tasks, err := s.storage.GetTasks(int(userID.(float64)))
 	if err != nil {
 		s.logger.Error("Error fetching tasks: ", err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch tasks"})
+		ctx.JSON(http.StatusInternalServerError, ErrorResponse{"Failed to fetch tasks"})
 		return
 	}
 
 	ctx.JSON(http.StatusOK, tasks)
 }
 
-
-// handleCreateTask retrieves a specific task for the authenticated user.
-// swagger:route post /tasks/{taskID} tasks handleCreateTask
-//
-// Create a specific task for the authenticated user.
-//
-// Responses:
-//   200: Task response
-//   400: errorResponse
-//   401: errorResponse
-//   404: errorResponse
-//   500: errorResponse
+// @Summary Handling task creation
+// @Description Handling the request to create a task for the authenticated user
+// @Accept json
+// @Produce json
+// @Param input body models.Task true "Task data"
+// @Success 200 {object} models.Task "Created task"
+// @Failure 400,401,500 {object} ErrorResponse "Error response with details"
+// @Router /tasks [post]
 func (s *APIServer) handleCreateTask(ctx *gin.Context) {
 	var task models.Task
 	if err := ctx.ShouldBindJSON(&task); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task data"})
+		ctx.JSON(http.StatusBadRequest, ErrorResponse{"Invalid task data"})
 		return
 	}
 
@@ -306,77 +253,73 @@ func (s *APIServer) handleCreateTask(ctx *gin.Context) {
 
 	if !ok {
 		s.logger.Error("No userID")
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Wrong user id"})
+		ctx.JSON(http.StatusBadRequest, ErrorResponse{"Wrong user id"})
 	}
-	err := s.storage.CreateTask(int(userID.(float64)), task.Title, task.Description)
+	err := s.storage.CreateTask(int(userID.(float64)), task.Title, task.Description, task.ScheduledFor)
 	if err != nil {
 		s.logger.Error("Error creating task: ", err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create task"})
+		ctx.JSON(http.StatusInternalServerError, ErrorResponse{"Failed to create task"})
 		return
 	}
 
 	ctx.JSON(http.StatusOK, task)
 }
 
-// handleGetTask retrieves a specific task for the authenticated user.
-// swagger:route GET /tasks/{taskID} tasks handleGetTask
-//
-// Get a specific task for the authenticated user.
-//
-// Responses:
-//   200: taskResponse
-//   400: errorResponse
-//   401: errorResponse
-//   404: errorResponse
-//   500: errorResponse
+// @Summary Handling fetching a task
+// @Description Handling the request to fetch a specific task for the authenticated user
+// @Produce json
+// @Param userID path int true "User ID"
+// @Param taskID path int true "Task ID"
+// @Success 200 {object} models.Task "Fetched task"
+// @Failure 400,401,404 {object} ErrorResponse "Error response with details"
+// @Router /tasks/{userID}/{taskID} [get]
 func (s *APIServer) handleGetTask(ctx *gin.Context) {
 	userID, err := strconv.Atoi(ctx.Param("userID"))
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		ctx.JSON(http.StatusBadRequest, ErrorResponse{"Invalid user ID"})
 		return
 	}
 	taskID, err := strconv.Atoi(ctx.Param("taskID"))
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task ID"})
+		ctx.JSON(http.StatusBadRequest, ErrorResponse{"Invalid task ID"})
 		return
 	}
 
 	task, err := s.storage.GetTaskByID(userID, taskID)
 	if err != nil {
 		s.logger.Error("Error fetching task: ", err)
-		ctx.JSON(http.StatusNotFound, gin.H{"error": "Task not found"})
+		ctx.JSON(http.StatusNotFound, ErrorResponse{"Task not found"})
 		return
 	}
 
 	ctx.JSON(http.StatusOK, task)
 }
 
-// handleUpdateTask updates a specific task for the authenticated user.
-// swagger:route PUT /tasks/{taskID} tasks handleUpdateTask
-//
-// Update a specific task for the authenticated user.
-//
-// Responses:
-//   200: messageResponse
-//   400: errorResponse
-//   401: errorResponse
-//   404: errorResponse
-//   500: errorResponse
+// @Summary Handling updating a task
+// @Description Handling the request to update a specific task for the authenticated user
+// @Accept json
+// @Produce json
+// @Param userID path int true "User ID"
+// @Param taskID path int true "Task ID"
+// @Param input body models.Task true "Updated task data"
+// @Success 200 {object} StatusResponse "Task updated successfully"
+// @Failure 400,401,500 {object} ErrorResponse "Error response with details"
+// @Router /tasks/{userID}/{taskID} [put]
 func (s *APIServer) handleUpdateTask(ctx *gin.Context) {
 	userID, err := strconv.Atoi(ctx.Param("userID"))
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		ctx.JSON(http.StatusBadRequest, ErrorResponse{"Invalid user ID"})
 		return
 	}
 	taskID, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task ID"})
+		ctx.JSON(http.StatusBadRequest, ErrorResponse{"Invalid task ID"})
 		return
 	}
 
 	var task models.Task
 	if err := ctx.ShouldBindJSON(&task); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task data"})
+		ctx.JSON(http.StatusBadRequest, ErrorResponse{"Invalid task data"})
 		return
 	}
 
@@ -384,41 +327,38 @@ func (s *APIServer) handleUpdateTask(ctx *gin.Context) {
 
 	if err := s.storage.UpdateTask(userID, &task); err != nil {
 		s.logger.Error("Error updating task: ", err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update task"})
+		ctx.JSON(http.StatusInternalServerError, ErrorResponse{"Failed to update task"})
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "Task updated successfully"})
+	ctx.JSON(http.StatusOK, StatusResponse{"Task updated successfully"})
 }
 
-// handleDeleteTask deletes a specific task for the authenticated user.
-// swagger:route DELETE /tasks/{id} tasks handleDeleteTask
-//
-// Delete a specific task for the authenticated user.
-//
-// Responses:
-//   200: messageResponse
-//   400: errorResponse
-//   401: errorResponse
-//   404: errorResponse
-//   500: errorResponse
+// @Summary Handling deleting a task
+// @Description Handling the request to delete a specific task for the authenticated user
+// @Produce json
+// @Param userID path int true "User ID"
+// @Param taskID path int true "Task ID"
+// @Success 200 {object} ErrorResponse "Task deleted successfully"
+// @Failure 400,401,500 {object} ErrorResponse "Error response with details"
+// @Router /tasks/{userID}/{taskID} [delete]
 func (s *APIServer) handleDeleteTask(ctx *gin.Context) {
 	userID, err := strconv.Atoi(ctx.Param("userID"))
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		ctx.JSON(http.StatusBadRequest, ErrorResponse{"Invalid user ID"})
 		return
 	}
 	taskID, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task ID"})
+		ctx.JSON(http.StatusBadRequest, ErrorResponse{"Invalid task ID"})
 		return
 	}
 
 	if err := s.storage.DeleteTask(userID, taskID); err != nil {
 		s.logger.Error("Error deleting task: ", err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete task"})
+		ctx.JSON(http.StatusInternalServerError, ErrorResponse{"Failed to delete task"})
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "Task deleted successfully"})
+	ctx.JSON(http.StatusOK, ErrorResponse{"Task deleted successfully"})
 }

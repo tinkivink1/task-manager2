@@ -1,197 +1,392 @@
 {
-  "swagger": "2.0",
-  "paths": {
-    "/login": {
-      "post": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "Authenticate user and generate JWT token.",
-        "operationId": "handleLogin",
-        "responses": {
-          "200": {
-            "$ref": "#/responses/tokenResponse"
-          },
-          "400": {
-            "$ref": "#/responses/errorResponse"
-          },
-          "401": {
-            "$ref": "#/responses/errorResponse"
-          },
-          "500": {
-            "$ref": "#/responses/errorResponse"
-          }
-        }
-      }
+    "swagger": "2.0",
+    "info": {
+        "contact": {}
     },
-    "/register": {
-      "post": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "Register a new user and generate JWT token.",
-        "operationId": "handleRegister",
-        "responses": {
-          "200": {
-            "$ref": "#/responses/tokenResponse"
-          },
-          "400": {
-            "$ref": "#/responses/errorResponse"
-          },
-          "409": {
-            "$ref": "#/responses/errorResponse"
-          },
-          "500": {
-            "$ref": "#/responses/errorResponse"
-          }
+    "paths": {
+        "/login": {
+            "post": {
+                "description": "Handling login using given login and password",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Handling login",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.TokenResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/register": {
+            "post": {
+                "description": "Handling user registration using given username and password",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Handling user registration",
+                "responses": {
+                    "200": {
+                        "description": "Successful response with an access token",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.TokenResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Error response with details",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Error response with details",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Error response with details",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tasks": {
+            "get": {
+                "description": "Handling the request to fetch tasks for the authenticated user",
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Handling fetching tasks",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "userID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of tasks",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.Task"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Error response with details",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Error response with details",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Error response with details",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Handling the request to create a task for the authenticated user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Handling task creation",
+                "parameters": [
+                    {
+                        "description": "Task data",
+                        "name": "input",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.Task"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Created task",
+                        "schema": {
+                            "$ref": "#/definitions/models.Task"
+                        }
+                    },
+                    "400": {
+                        "description": "Error response with details",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Error response with details",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Error response with details",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tasks/{userID}/{taskID}": {
+            "get": {
+                "description": "Handling the request to fetch a specific task for the authenticated user",
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Handling fetching a task",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "userID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Task ID",
+                        "name": "taskID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Fetched task",
+                        "schema": {
+                            "$ref": "#/definitions/models.Task"
+                        }
+                    },
+                    "400": {
+                        "description": "Error response with details",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Error response with details",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Error response with details",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Handling the request to update a specific task for the authenticated user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Handling updating a task",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "userID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Task ID",
+                        "name": "taskID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Updated task data",
+                        "name": "input",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.Task"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Task updated successfully",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.StatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Error response with details",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Error response with details",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Error response with details",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Handling the request to delete a specific task for the authenticated user",
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Handling deleting a task",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "userID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Task ID",
+                        "name": "taskID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Task deleted successfully",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.ErrorResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Error response with details",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Error response with details",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Error response with details",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.ErrorResponse"
+                        }
+                    }
+                }
+            }
         }
-      }
     },
-    "/tasks": {
-      "get": {
-        "tags": [
-          "tasks"
-        ],
-        "summary": "Get tasks for the authenticated user.",
-        "operationId": "handleGetTasks",
-        "responses": {
-          "200": {
-            "$ref": "#/responses/tasksResponse"
-          },
-          "400": {
-            "$ref": "#/responses/errorResponse"
-          },
-          "401": {
-            "$ref": "#/responses/errorResponse"
-          },
-          "500": {
-            "$ref": "#/responses/errorResponse"
-          }
+    "definitions": {
+        "apiserver.ErrorResponse": {
+            "description": "API response with an error message.",
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.StatusResponse": {
+            "description": "Successful API response with a message.",
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.TokenResponse": {
+            "description": "API response with an access token.",
+            "type": "object",
+            "properties": {
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.Task": {
+            "description": "Task details with ID, title, description, creation time, management time, and associated user ID.",
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "scheduled_for": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
+                }
+            }
         }
-      }
-    },
-    "/tasks/{id}": {
-      "delete": {
-        "tags": [
-          "tasks"
-        ],
-        "summary": "Delete a specific task for the authenticated user.",
-        "operationId": "handleDeleteTask",
-        "responses": {
-          "200": {
-            "$ref": "#/responses/messageResponse"
-          },
-          "400": {
-            "$ref": "#/responses/errorResponse"
-          },
-          "401": {
-            "$ref": "#/responses/errorResponse"
-          },
-          "404": {
-            "$ref": "#/responses/errorResponse"
-          },
-          "500": {
-            "$ref": "#/responses/errorResponse"
-          }
-        }
-      }
-    },
-    "/tasks/{taskID}": {
-      "get": {
-        "tags": [
-          "tasks"
-        ],
-        "summary": "Get a specific task for the authenticated user.",
-        "operationId": "handleGetTask",
-        "responses": {
-          "200": {
-            "$ref": "#/responses/taskResponse"
-          },
-          "400": {
-            "$ref": "#/responses/errorResponse"
-          },
-          "401": {
-            "$ref": "#/responses/errorResponse"
-          },
-          "404": {
-            "$ref": "#/responses/errorResponse"
-          },
-          "500": {
-            "$ref": "#/responses/errorResponse"
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "tasks"
-        ],
-        "summary": "Update a specific task for the authenticated user.",
-        "operationId": "handleUpdateTask",
-        "responses": {
-          "200": {
-            "$ref": "#/responses/messageResponse"
-          },
-          "400": {
-            "$ref": "#/responses/errorResponse"
-          },
-          "401": {
-            "$ref": "#/responses/errorResponse"
-          },
-          "404": {
-            "$ref": "#/responses/errorResponse"
-          },
-          "500": {
-            "$ref": "#/responses/errorResponse"
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "tasks"
-        ],
-        "summary": "Create a specific task for the authenticated user.",
-        "operationId": "handleCreateTask",
-        "responses": {
-          "200": {
-            "description": "response",
-            "$ref": "#/responses/Task"
-          },
-          "400": {
-            "$ref": "#/responses/errorResponse"
-          },
-          "401": {
-            "$ref": "#/responses/errorResponse"
-          },
-          "404": {
-            "$ref": "#/responses/errorResponse"
-          },
-          "500": {
-            "$ref": "#/responses/errorResponse"
-          }
-        }
-      }
     }
-  },
-  "responses": {
-    "errorResponse": {
-      "description": "ErrorResponse represents an error response.",
-      "headers": {
-        "error": {
-          "type": "string",
-          "example": "Invalid task ID.",
-          "description": "The error message."
-        }
-      }
-    },
-    "messageResponse": {
-      "description": "MessageResponse represents a response message.",
-      "headers": {
-        "message": {
-          "type": "string",
-          "example": "Task deleted successfully.",
-          "description": "The message string."
-        }
-      }
-    }
-  }
 }

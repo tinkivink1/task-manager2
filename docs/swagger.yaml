@@ -1,0 +1,263 @@
+definitions:
+  apiserver.ErrorResponse:
+    description: API response with an error message.
+    properties:
+      error:
+        type: string
+    type: object
+  apiserver.StatusResponse:
+    description: Successful API response with a message.
+    properties:
+      message:
+        type: string
+    type: object
+  apiserver.TokenResponse:
+    description: API response with an access token.
+    properties:
+      token:
+        type: string
+    type: object
+  models.Task:
+    description: Task details with ID, title, description, creation time, management
+      time, and associated user ID.
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      scheduled_for:
+        type: string
+      title:
+        type: string
+      user_id:
+        type: integer
+    type: object
+info:
+  contact: {}
+paths:
+  /login:
+    post:
+      consumes:
+      - application/json
+      description: Handling login using given login and password
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.TokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/apiserver.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/apiserver.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/apiserver.ErrorResponse'
+      summary: Handling login
+  /register:
+    post:
+      consumes:
+      - application/json
+      description: Handling user registration using given username and password
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successful response with an access token
+          schema:
+            $ref: '#/definitions/apiserver.TokenResponse'
+        "400":
+          description: Error response with details
+          schema:
+            $ref: '#/definitions/apiserver.ErrorResponse'
+        "409":
+          description: Error response with details
+          schema:
+            $ref: '#/definitions/apiserver.ErrorResponse'
+        "500":
+          description: Error response with details
+          schema:
+            $ref: '#/definitions/apiserver.ErrorResponse'
+      summary: Handling user registration
+  /tasks:
+    get:
+      description: Handling the request to fetch tasks for the authenticated user
+      parameters:
+      - description: User ID
+        in: path
+        name: userID
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of tasks
+          schema:
+            items:
+              $ref: '#/definitions/models.Task'
+            type: array
+        "400":
+          description: Error response with details
+          schema:
+            $ref: '#/definitions/apiserver.ErrorResponse'
+        "401":
+          description: Error response with details
+          schema:
+            $ref: '#/definitions/apiserver.ErrorResponse'
+        "500":
+          description: Error response with details
+          schema:
+            $ref: '#/definitions/apiserver.ErrorResponse'
+      summary: Handling fetching tasks
+    post:
+      consumes:
+      - application/json
+      description: Handling the request to create a task for the authenticated user
+      parameters:
+      - description: Task data
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/models.Task'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Created task
+          schema:
+            $ref: '#/definitions/models.Task'
+        "400":
+          description: Error response with details
+          schema:
+            $ref: '#/definitions/apiserver.ErrorResponse'
+        "401":
+          description: Error response with details
+          schema:
+            $ref: '#/definitions/apiserver.ErrorResponse'
+        "500":
+          description: Error response with details
+          schema:
+            $ref: '#/definitions/apiserver.ErrorResponse'
+      summary: Handling task creation
+  /tasks/{userID}/{taskID}:
+    delete:
+      description: Handling the request to delete a specific task for the authenticated
+        user
+      parameters:
+      - description: User ID
+        in: path
+        name: userID
+        required: true
+        type: integer
+      - description: Task ID
+        in: path
+        name: taskID
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Task deleted successfully
+          schema:
+            $ref: '#/definitions/apiserver.ErrorResponse'
+        "400":
+          description: Error response with details
+          schema:
+            $ref: '#/definitions/apiserver.ErrorResponse'
+        "401":
+          description: Error response with details
+          schema:
+            $ref: '#/definitions/apiserver.ErrorResponse'
+        "500":
+          description: Error response with details
+          schema:
+            $ref: '#/definitions/apiserver.ErrorResponse'
+      summary: Handling deleting a task
+    get:
+      description: Handling the request to fetch a specific task for the authenticated
+        user
+      parameters:
+      - description: User ID
+        in: path
+        name: userID
+        required: true
+        type: integer
+      - description: Task ID
+        in: path
+        name: taskID
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Fetched task
+          schema:
+            $ref: '#/definitions/models.Task'
+        "400":
+          description: Error response with details
+          schema:
+            $ref: '#/definitions/apiserver.ErrorResponse'
+        "401":
+          description: Error response with details
+          schema:
+            $ref: '#/definitions/apiserver.ErrorResponse'
+        "404":
+          description: Error response with details
+          schema:
+            $ref: '#/definitions/apiserver.ErrorResponse'
+      summary: Handling fetching a task
+    put:
+      consumes:
+      - application/json
+      description: Handling the request to update a specific task for the authenticated
+        user
+      parameters:
+      - description: User ID
+        in: path
+        name: userID
+        required: true
+        type: integer
+      - description: Task ID
+        in: path
+        name: taskID
+        required: true
+        type: integer
+      - description: Updated task data
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/models.Task'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Task updated successfully
+          schema:
+            $ref: '#/definitions/apiserver.StatusResponse'
+        "400":
+          description: Error response with details
+          schema:
+            $ref: '#/definitions/apiserver.ErrorResponse'
+        "401":
+          description: Error response with details
+          schema:
+            $ref: '#/definitions/apiserver.ErrorResponse'
+        "500":
+          description: Error response with details
+          schema:
+            $ref: '#/definitions/apiserver.ErrorResponse'
+      summary: Handling updating a task
+swagger: "2.0"

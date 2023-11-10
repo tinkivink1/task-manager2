@@ -2,13 +2,12 @@ package postgres
 
 import (
 	"TaskManager/internal/models"
-	"log"
 	"time"
 
-	"github.com/golang-migrate/migrate"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 )
+
 type Storage struct {
 	config *Config
 	db     *sqlx.DB
@@ -41,38 +40,6 @@ func (s *Storage) Close() error {
 	}
 
 	return nil
-}
-
-func (s *Storage) Migrate() error {
-    // Подключение к базе данных
-    err := s.Open()
-    if err != nil {
-        return err
-    }
-    defer s.Close()
-
-    // Создание объекта миграции
-    m, err := migrate.New("file://path/to/migrations", s.config.DataBaseURL)
-    if err != nil {
-        return err
-    }
-    
-    // Получение текущей версии базы данных
-    version, _, _ := m.Version()
-
-    // Если версия базы данных равна 0, миграции не были применены
-    if version == 0 {
-        log.Println("Применение миграций...")
-        err = m.Up()
-        if err != nil && err != migrate.ErrNoChange {
-            return err
-        }
-        log.Println("Миграции успешно применены")
-    } else {
-        log.Println("База данных уже имеет миграции, пропуск применения миграций")
-    }
-
-    return nil
 }
 
 func (s *Storage) CreateUser(username, password string) (int, error) {
@@ -108,9 +75,9 @@ func (s *Storage) GetTasks(userID int) ([]models.Task, error) {
 	return tasks, err
 }
 
-func (s *Storage) CreateTask(userID int, title, description string) error {
-	_, err := s.db.Exec("INSERT INTO tasks (title, description, created_at, managed_at, user_id) VALUES ($1, $2, $3, $4, $5)",
-		title, description, time.Now(), time.Now(), userID)
+func (s *Storage) CreateTask(userID int, title, description string, scheduledFor time.Time) error {
+	_, err := s.db.Exec("INSERT INTO tasks (title, description, created_at, scheduled_for, user_id) VALUES ($1, $2, $3, $4, $5)",
+		title, description, time.Now(), scheduledFor, userID)
 	return err
 }
 

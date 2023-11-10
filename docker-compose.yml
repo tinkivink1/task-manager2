@@ -1,0 +1,33 @@
+version: '3'
+services:
+  # Go Service
+  golang:
+    image: golang:latest
+    build: ./
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./:/app
+    # command: 
+    #   - ls -a
+
+  # Redis Service
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+
+  # PostgreSQL Service
+  postgres:
+    image: postgres:latest
+    environment:
+      POSTGRES_DB: taskmanager
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+    ports:
+      - "5432:5432"
+    # volumes:
+    #   - ./:/var/lib/postgresql/data 

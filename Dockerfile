@@ -9,4 +9,4 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY ./ ./
 
-RUN go build -o taskmanager ./cmd/app/main.go
+RUN go run ./cmd/app/main.go
